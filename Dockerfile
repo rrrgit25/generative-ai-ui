@@ -10,7 +10,10 @@ COPY src ./src
 ENV REACT_APP_API_BASE_URL="" CI=true GENERATE_SOURCEMAP=false
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.30-alpine
+# Pick up Alpine security fixes released after the base image was built.
+USER root
+RUN apk upgrade --no-cache
 COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/build /usr/share/nginx/html
 USER 101
