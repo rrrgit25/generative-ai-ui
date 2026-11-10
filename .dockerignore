@@ -1,0 +1,14 @@
+node_modules
+build
+backend
+infra
+docs
+scripts
+server
+.git
+.github
+.vscode
+.env
+.env.*
+*.log
+.DS_Store

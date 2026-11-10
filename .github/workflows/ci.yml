@@ -64,10 +64,17 @@ jobs:
       - uses: azure/setup-helm@v4
         with:
           version: v4.3.1
-      - name: Lint & render chart
+      - name: Lint & render charts
         run: |
-          helm lint deploy/helm/genai-backend --set image.repository=x --set image.tag=y
-          helm template t deploy/helm/genai-backend --set image.repository=x --set image.tag=y > rendered.yaml
+          for c in genai-backend genai-frontend; do
+            for mode in "" "--set ingress.host=1-2-3-4.sslip.io --set ingress.tls=true"; do
+              # shellcheck disable=SC2086
+              helm lint deploy/helm/$c --set image.repository=x --set image.tag=y $mode
+              # shellcheck disable=SC2086
+              helm template t deploy/helm/$c --set image.repository=x --set image.tag=y $mode >> rendered.yaml
+              echo "---" >> rendered.yaml
+            done
+          done
       - name: Validate manifests (kubeconform)
         run: |
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz

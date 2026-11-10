@@ -9,7 +9,7 @@
 locals {
   secret_params = toset(["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "VIDEO_PROVIDER_API_KEY"])
   config_params = {
-    CORS_ALLOWED_ORIGINS  = "https://${aws_cloudfront_distribution.main.domain_name}"
+    CORS_ALLOWED_ORIGINS  = local.app_url
     GENERATION_RATE_LIMIT = "10"
   }
 }

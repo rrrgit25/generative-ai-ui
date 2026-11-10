@@ -2,6 +2,26 @@
 
 ## Architecture
 
+Two modes, selected by the Terraform variable `enable_cloudfront`:
+
+**Direct mode (`enable_cloudfront = false`, current default).** Works on accounts that are not yet
+verified for CloudFront.
+```
+Browser ──HTTPS──▶ https://<eip-with-dashes>.sslip.io  (wildcard DNS → Elastic IP)
+                     EC2 :443 Traefik (Let's Encrypt cert, HTTP→HTTPS redirect on :80)
+                       ├─ /api, /media, /actuator/health ─▶ genai-backend pod (Spring Boot)
+                       └─ /                             ─▶ genai-frontend pod (nginx, React SPA)
+```
+Ports 80 and 443 are open to the internet. The SPA ships as a container image in ECR instead of
+S3. Let's Encrypt certificates are stored on a persistent volume, so restarts don't re-issue them
+and hit rate limits.
+
+To move to CloudFront once the account is verified, set `enable_cloudfront = true` in
+`terraform.tfvars`, then run `terraform apply`, `scripts/set-github-vars.sh` and the Deploy
+workflow. The node is replaced because its bootstrap differs between modes.
+
+**CloudFront mode (`enable_cloudfront = true`):**
+
 ```
 Browser ──HTTPS──▶ CloudFront (default *.cloudfront.net cert, security headers)
                      ├─ /*                     ─▶ S3 (React SPA, private via OAC)

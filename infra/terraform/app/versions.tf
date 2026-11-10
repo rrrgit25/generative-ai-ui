@@ -44,4 +44,9 @@ locals {
   name       = "${var.project}-${var.environment}"
   account_id = data.aws_caller_identity.current.account_id
   ssm_prefix = "/${var.project}/${var.environment}"
+  cf         = var.enable_cloudfront ? 1 : 0
+
+  # Public hostname of the app: CloudFront domain, or a wildcard-DNS name that resolves to the EIP.
+  app_host = var.enable_cloudfront ? aws_cloudfront_distribution.main[0].domain_name : "${replace(aws_eip.node.public_ip, ".", "-")}.sslip.io"
+  app_url  = "https://${local.app_host}"
 }

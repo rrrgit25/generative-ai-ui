@@ -46,15 +46,30 @@ data "aws_ec2_managed_prefix_list" "cloudfront" {
 
 resource "aws_security_group" "node" {
   name        = "${local.name}-node"
-  description = "k3s node: HTTP from CloudFront only"
+  description = "k3s node web ingress"
   vpc_id      = aws_vpc.main.id
 
-  ingress {
-    description     = "HTTP from CloudFront origin-facing servers"
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
+  dynamic "ingress" {
+    for_each = var.enable_cloudfront ? [80] : []
+    content {
+      description     = "HTTP from CloudFront origin-facing servers"
+      from_port       = 80
+      to_port         = 80
+      protocol        = "tcp"
+      prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
+    }
+  }
+
+  # Direct mode: Traefik terminates TLS (Let's Encrypt); port 80 serves ACME challenges + redirect.
+  dynamic "ingress" {
+    for_each = var.enable_cloudfront ? [] : [80, 443]
+    content {
+      description = "Public web traffic (Traefik)"
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
   }
 
   egress {

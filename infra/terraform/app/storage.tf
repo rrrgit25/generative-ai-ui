@@ -10,9 +10,22 @@ resource "aws_ecr_repository" "backend" {
   }
 }
 
-# Free tier includes 500 MB of private ECR storage (~200 MB per image); keep only the last 2.
-resource "aws_ecr_lifecycle_policy" "backend" {
-  repository = aws_ecr_repository.backend.name
+# SPA image (nginx) used when CloudFront is disabled.
+resource "aws_ecr_repository" "frontend" {
+  name                 = "${var.project}/frontend"
+  image_tag_mutability = "IMMUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}
+
+# Free tier includes 500 MB of private ECR storage (backend ~200 MB, frontend ~25 MB per image);
+# keep only the last 2 of each.
+resource "aws_ecr_lifecycle_policy" "this" {
+  for_each   = { backend = aws_ecr_repository.backend.name, frontend = aws_ecr_repository.frontend.name }
+  repository = each.value
   policy = jsonencode({
     rules = [{
       rulePriority = 1
@@ -76,6 +89,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
 
 # Only the CloudFront distribution may read the SPA bucket (Origin Access Control).
 resource "aws_s3_bucket_policy" "frontend" {
+  count  = local.cf
   bucket = aws_s3_bucket.frontend.id
   policy = jsonencode({
     Version = "2012-10-17"
@@ -86,7 +100,7 @@ resource "aws_s3_bucket_policy" "frontend" {
         Principal = { Service = "cloudfront.amazonaws.com" }
         Action    = "s3:GetObject"
         Resource  = "${aws_s3_bucket.frontend.arn}/*"
-        Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.main.arn } }
+        Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.main[0].arn } }
       },
       {
         Sid       = "DenyInsecureTransport"

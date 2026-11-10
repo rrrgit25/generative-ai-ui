@@ -27,8 +27,8 @@ mkdir -p /etc/rancher/k3s
 cat > /etc/rancher/k3s/config.yaml <<'EOF'
 write-kubeconfig-mode: "0600"
 secrets-encryption: true
-# AL2023's /etc/resolv.conf points at the systemd-resolved stub (127.0.0.53), which makes
-# CoreDNS forward to itself (plugin/loop FATAL). Use the real upstream resolvers instead.
+# Use the real upstream (VPC) resolvers rather than AL2023's 127.0.0.53 systemd-resolved stub,
+# which pods cannot reach. (The VPC CIDR must also not overlap 10.42/16 or 10.43/16.)
 resolv-conf: /run/systemd/resolve/resolv.conf
 kubelet-arg:
   - "system-reserved=memory=150Mi"
@@ -37,6 +37,37 @@ kubelet-arg:
   - "image-gc-low-threshold=50"
 EOF
 
+%{ if !enable_cloudfront ~}
+# Direct mode: Traefik terminates TLS with free Let's Encrypt certificates (HTTP-01 challenge),
+# keeps them on a persistent volume (avoids LE rate limits on restart), and redirects HTTP->HTTPS.
+mkdir -p /var/lib/rancher/k3s/server/manifests
+cat > /var/lib/rancher/k3s/server/manifests/traefik-config.yaml <<'EOF'
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 128Mi
+      path: /data
+    deployment:
+      strategy:
+        type: Recreate
+    additionalArguments:
+      - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--entryPoints.websecure.http.tls.certResolver=letsencrypt"
+      - "--entryPoints.web.http.redirections.entryPoint.to=:443"
+      - "--entryPoints.web.http.redirections.entryPoint.scheme=https"
+      - "--entryPoints.web.http.redirections.entryPoint.permanent=true"
+EOF
+
+%{ endif ~}
 curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_VERSION="${k3s_version}" sh -s - server
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' > /etc/profile.d/k3s.sh

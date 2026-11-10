@@ -84,3 +84,14 @@ variable "monthly_budget_usd" {
   type        = number
   default     = 1
 }
+
+variable "enable_cloudfront" {
+  description = <<-EOT
+    true:  CloudFront (HTTPS, CDN) in front of S3 (SPA) and the node (API); node port 80 open to
+           CloudFront only. Requires a CloudFront-verified account.
+    false: the node serves SPA + API directly via Traefik with a free Let's Encrypt certificate
+           on <eip>.sslip.io; ports 80/443 open to the internet.
+  EOT
+  type        = bool
+  default     = false
+}

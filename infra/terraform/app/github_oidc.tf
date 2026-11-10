@@ -60,7 +60,7 @@ data "aws_iam_policy_document" "github_deploy" {
       "ecr:DescribeImages", "ecr:GetDownloadUrlForLayer", "ecr:InitiateLayerUpload",
       "ecr:PutImage", "ecr:UploadLayerPart",
     ]
-    resources = [aws_ecr_repository.backend.arn]
+    resources = [aws_ecr_repository.backend.arn, aws_ecr_repository.frontend.arn]
   }
   statement {
     sid     = "PublishBuckets"
@@ -70,10 +70,13 @@ data "aws_iam_policy_document" "github_deploy" {
       aws_s3_bucket.artifacts.arn, "${aws_s3_bucket.artifacts.arn}/*",
     ]
   }
-  statement {
-    sid       = "InvalidateCdn"
-    actions   = ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"]
-    resources = [aws_cloudfront_distribution.main.arn]
+  dynamic "statement" {
+    for_each = var.enable_cloudfront ? [1] : []
+    content {
+      sid       = "InvalidateCdn"
+      actions   = ["cloudfront:CreateInvalidation", "cloudfront:GetInvalidation"]
+      resources = [aws_cloudfront_distribution.main[0].arn]
+    }
   }
   statement {
     sid     = "RunDeployOnNode"

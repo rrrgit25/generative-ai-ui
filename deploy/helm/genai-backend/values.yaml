@@ -36,7 +36,9 @@ service:
 ingress:
   enabled: true
   className: traefik
-  host: ""          # empty = match any host (CloudFront sends the origin's DNS name)
+  host: ""          # empty = match any host (CloudFront mode); set to the public host in direct mode
+  tls: false        # direct mode: true (certificate from Traefik's Let's Encrypt resolver)
+  annotations: {}
   paths:
     - /api
     - /media

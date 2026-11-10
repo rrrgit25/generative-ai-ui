@@ -20,6 +20,7 @@ data "aws_cloudfront_response_headers_policy" "security" {
 }
 
 resource "aws_cloudfront_origin_access_control" "frontend" {
+  count                             = local.cf
   name                              = "${local.name}-frontend"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
@@ -29,6 +30,7 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
 # Client-side routing: rewrite extension-less paths to /index.html (only on the S3 behavior, so
 # API 404s stay real 404s).
 resource "aws_cloudfront_function" "spa_rewrite" {
+  count   = local.cf
   name    = "${local.name}-spa-rewrite"
   runtime = "cloudfront-js-2.0"
   publish = true
@@ -48,6 +50,7 @@ locals {
 }
 
 resource "aws_cloudfront_distribution" "main" {
+  count               = local.cf
   enabled             = true
   is_ipv6_enabled     = true
   comment             = local.name
@@ -58,7 +61,7 @@ resource "aws_cloudfront_distribution" "main" {
   origin {
     origin_id                = local.s3_origin_id
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
-    origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
+    origin_access_control_id = aws_cloudfront_origin_access_control.frontend[0].id
   }
 
   origin {
@@ -86,7 +89,7 @@ resource "aws_cloudfront_distribution" "main" {
 
     function_association {
       event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.spa_rewrite.arn
+      function_arn = aws_cloudfront_function.spa_rewrite[0].arn
     }
   }
 

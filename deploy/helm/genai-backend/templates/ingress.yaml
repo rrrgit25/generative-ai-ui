@@ -4,8 +4,17 @@ kind: Ingress
 metadata:
   name: {{ include "genai-backend.fullname" . }}
   labels: {{- include "genai-backend.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
+  {{- if and .Values.ingress.tls .Values.ingress.host }}
+  # No secretName: Traefik obtains the certificate from its Let's Encrypt resolver.
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+  {{- end }}
   rules:
     - {{- with .Values.ingress.host }}
       host: {{ . | quote }}

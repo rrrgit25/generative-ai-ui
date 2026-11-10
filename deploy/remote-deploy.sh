@@ -1,20 +1,32 @@
 #!/bin/bash
 # Runs ON the k3s node (invoked by GitHub Actions through SSM Run Command).
-#   remote-deploy.sh <image-repository> <image-tag> <region> <ssm-prefix>
+#   remote-deploy.sh <backend-repo> <image-tag> <region> <ssm-prefix> <app-host> <enable-cloudfront> <frontend-repo>
 # 1. waits for the node bootstrap to finish
 # 2. refreshes the ECR pull secret
 # 3. syncs SSM Parameter Store -> Kubernetes Secret (env vars for the backend)
-# 4. helm upgrade --install with automatic rollback on failure, then helm test
+# 4. helm upgrade --install backend (and, in direct mode, the frontend) with automatic rollback
+#    on failure, then helm test
 set -euo pipefail
 
 IMAGE_REPO="$1"
 IMAGE_TAG="$2"
 REGION="$3"
 SSM_PREFIX="$4"
+APP_HOST="${5:-}"
+ENABLE_CLOUDFRONT="${6:-true}"
+FRONTEND_REPO="${7:-}"
 
 RELEASE=genai-backend
 NAMESPACE=genai
-CHART_DIR="$(cd "$(dirname "$0")" && pwd)/helm/genai-backend"
+HELM_DIR="$(cd "$(dirname "$0")" && pwd)/helm"
+CHART_DIR="$HELM_DIR/genai-backend"
+
+# Direct mode: route by the public hostname and serve TLS (Traefik's Let's Encrypt resolver).
+# CloudFront mode: match any host on plain HTTP (CloudFront terminates TLS).
+INGRESS_ARGS=()
+if [ "$ENABLE_CLOUDFRONT" != "true" ]; then
+  INGRESS_ARGS=(--set-string ingress.host="$APP_HOST" --set ingress.tls=true)
+fi
 REQUIRED_KEYS=(ANTHROPIC_API_KEY OPENAI_API_KEY)
 
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
@@ -56,10 +68,24 @@ helm upgrade --install "$RELEASE" "$CHART_DIR" \
   --set image.repository="$IMAGE_REPO" \
   --set image.tag="$IMAGE_TAG" \
   --set-string podAnnotations.secret-checksum="$SECRET_SUM" \
+  "${INGRESS_ARGS[@]}" \
   --rollback-on-failure \
   --wait \
   --timeout 10m \
   --history-max 10
+
+if [ "$ENABLE_CLOUDFRONT" != "true" ]; then
+  log "deploying frontend ${FRONTEND_REPO}:${IMAGE_TAG}"
+  helm upgrade --install genai-frontend "$HELM_DIR/genai-frontend" \
+    --namespace "$NAMESPACE" \
+    --set image.repository="$FRONTEND_REPO" \
+    --set image.tag="$IMAGE_TAG" \
+    "${INGRESS_ARGS[@]}" \
+    --rollback-on-failure \
+    --wait \
+    --timeout 5m \
+    --history-max 5
+fi
 
 log "running helm test"
 helm test "$RELEASE" -n "$NAMESPACE" --timeout 2m

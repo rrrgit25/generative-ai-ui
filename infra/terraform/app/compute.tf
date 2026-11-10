@@ -92,10 +92,11 @@ resource "aws_instance" "node" {
 
   user_data_replace_on_change = true
   user_data = templatefile("${path.module}/templates/user_data.sh.tftpl", {
-    k3s_version  = var.k3s_version
-    helm_version = var.helm_version
-    region       = var.region
-    ecr_registry = "${local.account_id}.dkr.ecr.${var.region}.amazonaws.com"
+    k3s_version       = var.k3s_version
+    helm_version      = var.helm_version
+    region            = var.region
+    ecr_registry      = "${local.account_id}.dkr.ecr.${var.region}.amazonaws.com"
+    enable_cloudfront = var.enable_cloudfront
   })
 
   lifecycle {

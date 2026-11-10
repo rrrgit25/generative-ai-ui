@@ -77,11 +77,12 @@ resource "aws_cloudwatch_metric_alarm" "cpu_credits_low" {
 
 # User-facing availability SLI: share of requests answered with 5xx at the edge.
 resource "aws_cloudwatch_metric_alarm" "cdn_5xx" {
+  count               = local.cf
   alarm_name          = "${local.name}-cdn-5xx-rate"
   alarm_description   = "CloudFront 5xx error rate > 5% for 10 minutes (SLO burn)."
   namespace           = "AWS/CloudFront"
   metric_name         = "5xxErrorRate"
-  dimensions          = { DistributionId = aws_cloudfront_distribution.main.id, Region = "Global" }
+  dimensions          = { DistributionId = aws_cloudfront_distribution.main[0].id, Region = "Global" }
   statistic           = "Average"
   period              = 300
   evaluation_periods  = 2
@@ -129,18 +130,19 @@ resource "aws_budgets_budget" "monthly" {
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = local.name
   dashboard_body = jsonencode({
-    widgets = [
+    widgets = concat(var.enable_cloudfront ? [
       {
         type = "metric", x = 0, y = 0, width = 12, height = 6
         properties = {
           title = "Edge requests & errors", region = "us-east-1", stat = "Sum", period = 300
           metrics = [
-            ["AWS/CloudFront", "Requests", "DistributionId", aws_cloudfront_distribution.main.id, "Region", "Global"],
+            ["AWS/CloudFront", "Requests", "DistributionId", aws_cloudfront_distribution.main[0].id, "Region", "Global"],
             [".", "5xxErrorRate", ".", ".", ".", ".", { stat = "Average", yAxis = "right" }],
             [".", "4xxErrorRate", ".", ".", ".", ".", { stat = "Average", yAxis = "right" }],
           ]
         }
-      },
+      }
+      ] : [], [
       {
         type = "metric", x = 12, y = 0, width = 12, height = 6
         properties = {
@@ -171,6 +173,6 @@ resource "aws_cloudwatch_dashboard" "main" {
           ]
         }
       },
-    ]
+    ])
   })
 }
