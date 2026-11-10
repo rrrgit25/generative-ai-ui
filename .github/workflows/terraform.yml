@@ -4,11 +4,12 @@ name: Terraform
 # holds infrastructure-admin credentials.
 
 on:
+  workflow_dispatch:
   pull_request:
-    paths: ["infra/**"]
+    paths: ["infra/**", ".github/workflows/terraform.yml"]
   push:
     branches: [main]
-    paths: ["infra/**"]
+    paths: ["infra/**", ".github/workflows/terraform.yml"]
 
 permissions:
   contents: read
