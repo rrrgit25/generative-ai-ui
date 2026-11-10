@@ -16,14 +16,17 @@ variable "environment" {
 
 variable "instance_type" {
   description = <<-EOT
-    Free-tier EC2 type for the single-node k3s cluster (1 GiB RAM + 2 GiB swap).
+    Free-tier EC2 type for the single-node k3s cluster (plus 2 GiB swap). t3.micro/t2.micro have
+    1 GiB, which is too little for k3s + the JVM under load; t3.small (2 GiB) is free-tier eligible
+    on accounts on AWS's credit-based free plan (check: aws ec2 describe-instance-types
+    --filters Name=free-tier-eligible,Values=true).
   EOT
   type        = string
   default     = "t3.micro"
 
   validation {
-    condition     = contains(["t3.micro", "t2.micro"], var.instance_type)
-    error_message = "Only free-tier instance types (t3.micro, t2.micro) are allowed."
+    condition     = contains(["t3.small", "t3.micro", "t2.micro"], var.instance_type)
+    error_message = "Only free-tier instance types (t3.small, t3.micro, t2.micro) are allowed."
   }
 }
 
