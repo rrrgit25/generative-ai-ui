@@ -33,10 +33,16 @@ data "aws_iam_policy_document" "github_assume" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values = [
-        "repo:${var.github_repository}:ref:refs/heads/main",
-        "repo:${var.github_repository}:environment:production",
-      ]
+      values = concat(
+        [
+          "repo:${var.github_repository}:ref:refs/heads/main",
+          "repo:${var.github_repository}:environment:production",
+        ],
+        var.github_oidc_subject_repo == "" ? [] : [
+          "repo:${var.github_oidc_subject_repo}:ref:refs/heads/main",
+          "repo:${var.github_oidc_subject_repo}:environment:production",
+        ],
+      )
     }
   }
 }

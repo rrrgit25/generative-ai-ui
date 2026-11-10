@@ -64,6 +64,17 @@ variable "github_repository" {
   type        = string
 }
 
+variable "github_oidc_subject_repo" {
+  description = <<-EOT
+    Repo part of the OIDC "sub" claim when the repo uses GitHub immutable subject claims, e.g.
+    "rrrgit25@222990597/generative-ai-ui@1452143258". Find it with:
+    gh api repos/OWNER/REPO/actions/oidc/customization/sub (sub_claim_prefix minus "repo:").
+    Leave empty if the repo uses the default owner/name subject.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "create_github_oidc_provider" {
   description = "Set false if the account already has the token.actions.githubusercontent.com provider."
   type        = bool
