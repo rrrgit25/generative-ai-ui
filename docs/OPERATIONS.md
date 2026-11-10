@@ -42,6 +42,8 @@ monitoring, Route 53 health checks, T3 unlimited credits (set to `standard`).
 Prerequisites: AWS CLI (admin profile), Terraform >= 1.10, `gh` CLI, `jq`.
 
 ```bash
+# One command for steps 1-5:  scripts/provision.sh
+
 # 1. Remote state bucket (one time)
 cd infra/terraform/bootstrap && terraform init && terraform apply
 
