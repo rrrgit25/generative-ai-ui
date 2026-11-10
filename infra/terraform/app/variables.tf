@@ -16,17 +16,26 @@ variable "environment" {
 
 variable "instance_type" {
   description = <<-EOT
-    Free-tier eligible EC2 type for the single-node k3s cluster. t3.micro (1 GiB + 2 GiB swap) works;
-    t3.small (2 GiB) is also free-tier eligible on the AWS Free Plan and gives more headroom.
+    Free-tier EC2 type for the single-node k3s cluster (1 GiB RAM + 2 GiB swap).
   EOT
   type        = string
   default     = "t3.micro"
+
+  validation {
+    condition     = contains(["t3.micro", "t2.micro"], var.instance_type)
+    error_message = "Only free-tier instance types (t3.micro, t2.micro) are allowed."
+  }
 }
 
 variable "root_volume_size_gb" {
   description = "gp3 root volume size. Free tier covers 30 GB of EBS."
   type        = number
   default     = 20
+
+  validation {
+    condition     = var.root_volume_size_gb <= 30
+    error_message = "Free tier covers at most 30 GB of EBS in total."
+  }
 }
 
 variable "vpc_cidr" {
@@ -62,7 +71,10 @@ variable "alert_email" {
 }
 
 variable "monthly_budget_usd" {
-  description = "AWS Budgets threshold; alerts at 50/80/100% actual and 100% forecast."
+  description = <<-EOT
+    Free-tier guard: alerts when gross spend (before credits) reaches 50/80/100% of this amount,
+    i.e. as soon as anything exceeds free-tier allowances.
+  EOT
   type        = number
-  default     = 10
+  default     = 1
 }

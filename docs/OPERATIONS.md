@@ -23,19 +23,35 @@ an ALB ingress class.
 
 ## Free-tier cost profile
 
-| Resource | Free-tier coverage | Notes |
-|---|---|---|
-| EC2 t3.micro + 20 GB gp3 + public IPv4 | 750 h/mo free tier / Free Plan credits (~$12/mo) | `instance_type = "t3.small"` for more headroom |
-| CloudFront | Always free: 1 TB out, 10M requests | |
-| S3 (SPA, artifacts, tf state) | 5 GB | artifacts expire after 14 days |
-| ECR | 500 MB | lifecycle keeps the last 5 images |
-| SSM Parameter Store (standard), Session Manager, Run Command | free | |
-| CloudWatch: 5 alarms + 1 dashboard, basic metrics | 10 alarms, 3 dashboards free | |
-| SNS email, AWS Budgets | free | |
-| **Not free** | OpenAI / Anthropic API usage | billed by those providers |
+Only free-tier / always-free services are used. Terraform rejects non-free instance types and
+disks over 30 GB, and a $1 budget (gross spend, before credits) emails you as soon as anything
+exceeds a free allowance.
 
-Things that would cost money and are avoided on purpose: NAT gateway, ALB, EKS, detailed
-monitoring, Route 53 health checks, T3 unlimited credits (set to `standard`).
+| Service | Used for | Free allowance | This stack |
+|---|---|---|---|
+| EC2 | t3.micro k3s node | 750 h/month | 1 instance = ~730 h |
+| EBS | gp3 root volume | 30 GB | 20 GB |
+| Public IPv4 (EIP) | CloudFront origin | 750 h/month | 1 address |
+| CloudFront (+ Functions) | HTTPS, SPA + API routing | 1 TB out, 10M requests, 2M function calls (always free) | |
+| S3 | SPA, release bundles, Terraform state | 5 GB, 20k GET, 2k PUT | < 50 MB; bundles expire after 14 days |
+| ECR | backend image | 500 MB | last 2 images kept |
+| Data transfer out | | 100 GB/month | origin -> CloudFront is free |
+| SSM Parameter Store (standard), Run Command, Session Manager | secrets, deploys, shell access | free | |
+| KMS (AWS-managed keys) | SecureString encryption | free keys, 20k requests | |
+| CloudWatch | 5 alarms, 1 dashboard, basic metrics | 10 alarms, 3 dashboards | |
+| SNS | alert emails | 1,000 emails | |
+| AWS Budgets | free-tier guard | free | 1 budget |
+| VPC, IGW, subnets, SGs, IAM, OIDC | | free | |
+| GitHub Actions | CI/CD | unlimited on public repos | |
+
+Deliberately avoided because they are not free: EKS (~$73/mo), NAT gateway, ALB, WAF,
+customer-managed KMS keys, detailed monitoring, Route 53, T3 unlimited credits.
+
+**Free-tier limits are per account, not per stack.** EC2 and public IPv4 hours are shared by every
+instance in the account. A second always-on t3.micro doubles usage to ~1,460 h, past the 750 h
+allowance. Stop other instances you don't need.
+
+**Not AWS:** OpenAI and Anthropic API calls are billed by those providers.
 
 ## First-time setup
 
@@ -144,7 +160,7 @@ re-generates on request.
 
 ### Disk pressure
 k3s garbage-collects images at 70% disk usage. Check with `df -h /` and `crictl images`. ECR keeps
-only the last 5 images.
+only the last 2 images.
 
 ## Security notes
 

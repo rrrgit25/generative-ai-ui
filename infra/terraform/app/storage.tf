@@ -10,14 +10,14 @@ resource "aws_ecr_repository" "backend" {
   }
 }
 
-# Free tier includes 500 MB of private ECR storage; keep only recent images.
+# Free tier includes 500 MB of private ECR storage (~200 MB per image); keep only the last 2.
 resource "aws_ecr_lifecycle_policy" "backend" {
   repository = aws_ecr_repository.backend.name
   policy = jsonencode({
     rules = [{
       rulePriority = 1
-      description  = "Keep last 5 images"
-      selection    = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 5 }
+      description  = "Keep last 2 images (free tier: 500 MB)"
+      selection    = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 2 }
       action       = { type = "expire" }
     }]
   })

@@ -100,6 +100,12 @@ resource "aws_budgets_budget" "monthly" {
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
 
+  # Count spend before credits/refunds so free-tier overages are visible even on credit plans.
+  cost_types {
+    include_credit = false
+    include_refund = false
+  }
+
   dynamic "notification" {
     for_each = [50, 80, 100]
     content {
