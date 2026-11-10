@@ -1,0 +1,7 @@
+target/
+generated-media/
+.env
+*.log
+.idea/
+*.iml
+.DS_Store

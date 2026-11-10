@@ -1,0 +1,25 @@
+name: Uptime probe
+
+# Free external synthetic check (black-box SLI). A failed run emails the repo owner via GitHub's
+# standard workflow-failure notification. Hourly keeps private-repo Actions minutes in budget.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    if: ${{ vars.APP_URL != '' }}
+    steps:
+      - name: Backend health
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code} %{time_total}s' --max-time 20 "${{ vars.APP_URL }}/actuator/health")
+          echo "health: $code"
+          [ "${code%% *}" = "200" ]
+      - name: Frontend
+        run: curl -fsS --max-time 20 -o /dev/null "${{ vars.APP_URL }}/"

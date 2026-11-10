@@ -1,0 +1,3 @@
+{{ include "genai-backend.fullname" . }} deployed with image {{ .Values.image.repository }}:{{ .Values.image.tag }}
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "genai-backend.fullname" . }}
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

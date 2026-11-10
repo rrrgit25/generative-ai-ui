@@ -1,0 +1,4 @@
+github_repository = "your-github-user/generative-ai-ui"
+alert_email       = "you@example.com"
+# instance_type   = "t3.small"   # more headroom; free-tier eligible on the AWS Free Plan
+# create_github_oidc_provider = false  # if the account already has the GitHub OIDC provider

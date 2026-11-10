@@ -1,0 +1,93 @@
+#!/bin/bash
+# Bootstraps a single-node k3s cluster on Amazon Linux 2023.
+# Rendered by Terraform templatefile(): escape literal bash brace-expansions by doubling the dollar sign.
+set -euxo pipefail
+exec > >(tee -a /var/log/genai-bootstrap.log) 2>&1
+
+REGION="${region}"
+ECR_REGISTRY="${ecr_registry}"
+
+# --- OS basics -------------------------------------------------------------------------------
+dnf -y update --security
+dnf -y install jq tar gzip
+
+# Swap: headroom for JVM + k3s during rolling updates on a small instance.
+if [ ! -f /swapfile ]; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+sysctl -w vm.swappiness=10
+echo 'vm.swappiness=10' > /etc/sysctl.d/99-genai.conf
+
+# --- k3s -------------------------------------------------------------------------------------
+mkdir -p /etc/rancher/k3s
+cat > /etc/rancher/k3s/config.yaml <<'EOF'
+write-kubeconfig-mode: "0600"
+secrets-encryption: true
+kubelet-arg:
+  - "system-reserved=memory=150Mi"
+  - "eviction-hard=memory.available<100Mi"
+  - "image-gc-high-threshold=70"
+  - "image-gc-low-threshold=50"
+EOF
+
+curl -sfL https://get.k3s.io | INSTALL_K3S_SKIP_SELINUX_RPM=true INSTALL_K3S_VERSION="${k3s_version}" sh -s - server
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' > /etc/profile.d/k3s.sh
+
+for i in $(seq 1 60); do
+  kubectl get nodes 2>/dev/null | grep -q ' Ready' && break
+  sleep 5
+done
+kubectl get nodes
+
+# --- Helm ------------------------------------------------------------------------------------
+curl -sfL "https://get.helm.sh/helm-${helm_version}-linux-amd64.tar.gz" -o /tmp/helm.tgz
+tar -xzf /tmp/helm.tgz -C /tmp
+install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+rm -rf /tmp/helm.tgz /tmp/linux-amd64
+
+# --- ECR pull secret refresher (tokens expire after 12h) -------------------------------------
+cat > /usr/local/bin/ecr-refresh.sh <<EOF
+#!/bin/bash
+set -euo pipefail
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+TOKEN=\$(aws ecr get-login-password --region $REGION)
+for NS in genai; do
+  kubectl get ns "\$NS" >/dev/null 2>&1 || kubectl create ns "\$NS"
+  kubectl -n "\$NS" create secret docker-registry ecr-pull \\
+    --docker-server=$ECR_REGISTRY --docker-username=AWS --docker-password="\$TOKEN" \\
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+EOF
+chmod 0755 /usr/local/bin/ecr-refresh.sh
+
+cat > /etc/systemd/system/ecr-refresh.service <<'EOF'
+[Unit]
+Description=Refresh ECR image pull secret
+After=k3s.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ecr-refresh.sh
+EOF
+
+cat > /etc/systemd/system/ecr-refresh.timer <<'EOF'
+[Unit]
+Description=Refresh ECR image pull secret every 6h
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=6h
+Persistent=true
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now ecr-refresh.timer
+/usr/local/bin/ecr-refresh.sh
+
+touch /var/lib/genai-bootstrap-complete
+echo "bootstrap complete"

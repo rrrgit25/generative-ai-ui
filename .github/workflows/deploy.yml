@@ -1,0 +1,163 @@
+name: Deploy
+
+# Build -> scan -> push -> deploy backend to k3s (Helm via SSM) -> publish SPA -> smoke test.
+# AWS access is keyless (OIDC). Configuration comes from repository variables written by
+# scripts/set-github-vars.sh from Terraform outputs.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  backend:
+    needs: ci
+    # Skip (rather than fail) until scripts/set-github-vars.sh has configured the repo.
+    if: ${{ vars.AWS_DEPLOY_ROLE_ARN != '' }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          platforms: linux/amd64
+          load: true
+          tags: ${{ vars.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan image (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ vars.ECR_REPOSITORY_URL }}:${{ env.IMAGE_TAG }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Push image
+        run: docker push "${{ vars.ECR_REPOSITORY_URL }}:${IMAGE_TAG}"
+
+      - name: Upload release bundle (chart + deploy script)
+        run: aws s3 sync deploy/ "s3://${{ vars.ARTIFACTS_BUCKET }}/releases/${IMAGE_TAG}/" --delete
+
+      - name: Deploy to k3s via SSM
+        run: |
+          set -euo pipefail
+          REL="/opt/genai/releases/${IMAGE_TAG}"
+          PARAMS=$(jq -n \
+            --arg rel "$REL" \
+            --arg src "s3://${{ vars.ARTIFACTS_BUCKET }}/releases/${IMAGE_TAG}/" \
+            --arg repo "${{ vars.ECR_REPOSITORY_URL }}" \
+            --arg tag "$IMAGE_TAG" \
+            --arg region "${{ vars.AWS_REGION }}" \
+            --arg prefix "${{ vars.SSM_PREFIX }}" \
+            '{commands: [
+               "set -e",
+               "mkdir -p \($rel)",
+               "aws s3 sync \($src) \($rel) --region \($region) --only-show-errors",
+               "bash \($rel)/remote-deploy.sh \($repo) \($tag) \($region) \($prefix)"
+             ], executionTimeout: ["1200"]}')
+
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "${{ vars.INSTANCE_ID }}" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy ${IMAGE_TAG}" \
+            --parameters "$PARAMS" \
+            --query Command.CommandId --output text)
+          echo "SSM command: $CMD_ID"
+
+          while true; do
+            STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" \
+              --instance-id "${{ vars.INSTANCE_ID }}" --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in
+              Pending|InProgress|Delayed) sleep 10 ;;
+              *) break ;;
+            esac
+          done
+
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "${{ vars.INSTANCE_ID }}" \
+            --query '[StandardOutputContent, StandardErrorContent]' --output text
+          echo "Final status: $STATUS"
+          [ "$STATUS" = "Success" ]
+
+  frontend:
+    needs: backend
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Build (same-origin API)
+        run: npm run build
+        env:
+          CI: "true"
+          REACT_APP_API_BASE_URL: ""
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Publish to S3
+        run: |
+          # Hashed assets: cache forever. index.html & friends: always revalidate.
+          aws s3 sync build/ "s3://${{ vars.FRONTEND_BUCKET }}/" --delete \
+            --exclude index.html --exclude asset-manifest.json \
+            --cache-control "public,max-age=31536000,immutable"
+          aws s3 cp build/index.html "s3://${{ vars.FRONTEND_BUCKET }}/index.html" \
+            --cache-control "no-cache"
+          aws s3 cp build/asset-manifest.json "s3://${{ vars.FRONTEND_BUCKET }}/asset-manifest.json" \
+            --cache-control "no-cache"
+
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/index.html" "/" "/asset-manifest.json"
+
+  smoke-test:
+    needs: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Backend health through CloudFront
+        run: curl -fsS --retry 10 --retry-delay 10 --retry-all-errors "${{ vars.APP_URL }}/actuator/health"
+      - name: SPA served
+        run: curl -fsS --retry 5 --retry-delay 5 "${{ vars.APP_URL }}/" | grep -q '<div id="root">'
+      - name: SPA deep link rewrites to index.html
+        run: curl -fsS "${{ vars.APP_URL }}/chat" | grep -q '<div id="root">'

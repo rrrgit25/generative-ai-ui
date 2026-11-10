@@ -1,0 +1,6 @@
+apiVersion: v2
+name: genai-backend
+description: Spring Boot + Spring AI generation API (text, image, audio, video)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

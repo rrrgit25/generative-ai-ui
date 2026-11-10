@@ -1,0 +1,95 @@
+# Default values for genai-backend. Image repository/tag are set by the deploy pipeline.
+replicaCount: 1
+
+image:
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: ecr-pull
+
+# Kubernetes Secret (synced from SSM Parameter Store by deploy/remote-deploy.sh) exposed as env vars.
+existingSecret: genai-backend-env
+
+# Extra non-secret env vars.
+env:
+  SERVER_PORT: "8080"
+  MEDIA_STORAGE_DIR: /app/generated-media
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -XX:+ExitOnOutOfMemoryError -Djava.io.tmpdir=/tmp"
+
+# Annotations that force a rollout when they change (e.g. secret checksum).
+podAnnotations: {}
+
+# RollingUpdate with maxUnavailable=0 gives zero-downtime deploys; the local-path PVC is
+# ReadWriteOnce but both pods land on the same (single) node, so they can share it.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: traefik
+  host: ""          # empty = match any host (CloudFront sends the origin's DNS name)
+  paths:
+    - /api
+    - /media
+    - /actuator/health
+
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 2Gi
+
+# Sized for a t3.micro (1 GiB RAM + 2 GiB swap); the JVM idles at ~220 MiB.
+resources:
+  requests:
+    cpu: 100m
+    memory: 320Mi
+  limits:
+    memory: 600Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+probes:
+  startup:
+    httpGet: { path: /actuator/health/liveness, port: http }
+    periodSeconds: 5
+    failureThreshold: 60   # up to 5 min for a cold JVM on a burstable instance
+  liveness:
+    httpGet: { path: /actuator/health/liveness, port: http }
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 4
+  readiness:
+    httpGet: { path: /actuator/health/readiness, port: http }
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+terminationGracePeriodSeconds: 40
+
+networkPolicy:
+  enabled: true
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

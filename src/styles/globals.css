@@ -1,0 +1,133 @@
+:root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f7f8fa;
+    --bg-tertiary: #eef0f3;
+    --text-primary: #1a1d23;
+    --text-secondary: #5b6270;
+    --border-color: #e2e5ea;
+    --accent-color: #4f46e5;
+    --accent-hover: #4338ca;
+    --navbar-bg: #14162b;
+    --navbar-text: #ffffff;
+    --card-bg: #ffffff;
+    --shadow-color: rgba(16, 24, 40, 0.08);
+    --input-bg: #ffffff;
+    --message-user-bg: #e0e7ff;
+    --message-ai-bg: #f1f2f4;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+}
+
+[data-theme='dark'] {
+    --bg-primary: #0f1117;
+    --bg-secondary: #161822;
+    --bg-tertiary: #1f222d;
+    --text-primary: #e8e9ee;
+    --text-secondary: #a1a6b3;
+    --border-color: #2a2d3a;
+    --accent-color: #6366f1;
+    --accent-hover: #818cf8;
+    --navbar-bg: #0c0d16;
+    --navbar-text: #f0f0f0;
+    --card-bg: #1a1c26;
+    --shadow-color: rgba(0, 0, 0, 0.5);
+    --input-bg: #20222e;
+    --message-user-bg: #2f3670;
+    --message-ai-bg: #262838;
+}
+
+html, body, #root {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin: 0;
+    letter-spacing: -0.01em;
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+button {
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+}
+
+.header {
+    width: 100%;
+    padding: 20px;
+    background-color: var(--bg-secondary);
+    box-shadow: 0 2px 4px var(--shadow-color);
+}
+
+.footer {
+    width: 100%;
+    padding: 10px;
+    background-color: var(--bg-secondary);
+    text-align: center;
+}
+
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 600px;
+    margin: 20px auto;
+}
+
+.prompt-editor {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.settings-panel {
+    margin-top: 20px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+.generator {
+    margin-top: 20px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+    transition: all 0.2s ease;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+}
