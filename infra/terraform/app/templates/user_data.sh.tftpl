@@ -27,6 +27,9 @@ mkdir -p /etc/rancher/k3s
 cat > /etc/rancher/k3s/config.yaml <<'EOF'
 write-kubeconfig-mode: "0600"
 secrets-encryption: true
+# AL2023's /etc/resolv.conf points at the systemd-resolved stub (127.0.0.53), which makes
+# CoreDNS forward to itself (plugin/loop FATAL). Use the real upstream resolvers instead.
+resolv-conf: /run/systemd/resolve/resolv.conf
 kubelet-arg:
   - "system-reserved=memory=150Mi"
   - "eviction-hard=memory.available<100Mi"

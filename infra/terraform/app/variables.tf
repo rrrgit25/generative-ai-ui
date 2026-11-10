@@ -39,8 +39,14 @@ variable "root_volume_size_gb" {
 }
 
 variable "vpc_cidr" {
-  type    = string
-  default = "10.42.0.0/16"
+  description = "Must not overlap k3s pod (10.42.0.0/16) or service (10.43.0.0/16) CIDRs."
+  type        = string
+  default     = "10.20.0.0/16"
+
+  validation {
+    condition     = !anytrue([for c in ["10.42.0.0", "10.43.0.0"] : cidrhost(var.vpc_cidr, 0) == c])
+    error_message = "vpc_cidr must not overlap the k3s cluster CIDRs 10.42.0.0/16 and 10.43.0.0/16."
+  }
 }
 
 variable "k3s_version" {
